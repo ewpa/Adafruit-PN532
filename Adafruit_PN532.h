@@ -18,6 +18,8 @@
 
 	@section  HISTORY
 
+        v2.2  - Add MIFARE Classic value block functions.
+
   v2.0  - Refactored to add I2C support from Adafruit_NFCShield_I2C library.
 
 	v1.1  - Added full command list
@@ -104,7 +106,7 @@
 #define MIFARE_CMD_TRANSFER                 (0xB0)
 #define MIFARE_CMD_DECREMENT                (0xC0)
 #define MIFARE_CMD_INCREMENT                (0xC1)
-#define MIFARE_CMD_STORE                    (0xC2)
+#define MIFARE_CMD_RESTORE                  (0xC2)
 #define MIFARE_ULTRALIGHT_CMD_WRITE         (0xA2)
 
 // Prefixes for NDEF Records (to identify record type)
@@ -179,6 +181,10 @@ class Adafruit_PN532{
   uint8_t mifareclassic_AuthenticateBlock (uint8_t * uid, uint8_t uidLen, uint32_t blockNumber, uint8_t keyNumber, uint8_t * keyData);
   uint8_t mifareclassic_ReadDataBlock (uint8_t blockNumber, uint8_t * data);
   uint8_t mifareclassic_WriteDataBlock (uint8_t blockNumber, uint8_t * data);
+  bool mifareclassic_InitValueBlock (uint8_t blockNumber, int32_t value);
+  bool mifareclassic_ReadValueBlock (uint8_t blockNumber, int32_t *value);
+  bool mifareclassic_DecrementValueBlock (uint8_t blockNumber, int32_t amount = 1);
+  bool mifareclassic_IncrementValueBlock (uint8_t blockNumber, int32_t amount = 1);
   uint8_t mifareclassic_FormatNDEF (void);
   uint8_t mifareclassic_WriteNDEFURI (uint8_t sectorNumber, uint8_t uriIdentifier, const char * url);
   

@@ -19,6 +19,8 @@
 
     @section  HISTORY
 
+    v2.2 - Add MIFARE Classic value block functions.
+
     v2.1 - Added NTAG2xx helper functions
 
     v2.0 - Refactored to add I2C support from Adafruit_NFCShield_I2C library.
@@ -56,6 +58,7 @@
 #endif
 
 #include <SPI.h>
+#include <endian.h>
 
 #include "Adafruit_PN532.h"
 
@@ -966,6 +969,13 @@ uint8_t Adafruit_PN532::mifareclassic_WriteDataBlock (uint8_t blockNumber, uint8
     PN532DEBUGPRINT.print(F("Trying to write 16 bytes to block "));PN532DEBUGPRINT.println(blockNumber);
   #endif
 
+  /* Display data for debug if requested */
+  #ifdef MIFAREDEBUG
+    PN532DEBUGPRINT.print(F("Block "));
+    PN532DEBUGPRINT.println(blockNumber);
+    Adafruit_PN532::PrintHexChar(data, 16);
+  #endif
+
   /* Prepare the first command */
   pn532_packetbuffer[0] = PN532_COMMAND_INDATAEXCHANGE;
   pn532_packetbuffer[1] = 1;                      /* Card number */
@@ -985,6 +995,192 @@ uint8_t Adafruit_PN532::mifareclassic_WriteDataBlock (uint8_t blockNumber, uint8
 
   /* Read the response packet */
   readdata(pn532_packetbuffer, 26);
+
+  return 1;
+}
+
+/**************************************************************************/
+/*!
+    Tries to initialize the block as a correctly formatted value block.
+
+    @param  blockNumber   The block number to overwrite.  (0..63 for
+                          1KB cards, and 0..255 for 4KB cards).
+    @param  value         The 32 bit signed value to initialize the value
+                          with.
+
+    @returns 1 if everything executed properly, 0 for an error
+*/
+/**************************************************************************/
+bool Adafruit_PN532::mifareclassic_InitValueBlock (uint8_t blockNumber, int32_t value)
+{
+  uint8_t blockData[16];
+  int32_t valueBE = htobe32(value);
+  short i; for (i = 0; i < 4; i++)
+  {
+    blockData[i] = blockData[i + 8] = valueBE & 0xFF;
+    blockData[i + 4] = ~blockData[i];
+    valueBE = valueBE >> 8;
+  }
+  blockData[12] = blockData[14] = blockNumber;
+  blockData[13] = blockData[15] = ~blockNumber;
+  return mifareclassic_WriteDataBlock(blockNumber, &blockData[0]);
+}
+
+/**************************************************************************/
+/*!
+    Tries to read the value from the value block.
+
+    @param  blockNumber   The block number to read from.  (0..63 for
+                          1KB cards, and 0..255 for 4KB cards).
+    @param  value         Pointer to the 32 bit signed variable to write
+                          the value to.
+
+    @returns 1 if everything executed properly, 0 for an error
+*/
+/**************************************************************************/
+bool Adafruit_PN532::mifareclassic_ReadValueBlock (uint8_t blockNumber, int32_t *value)
+{
+  uint8_t blockData[16];
+  if (mifareclassic_ReadDataBlock(blockNumber, &blockData[0]))
+  {
+    short i, j;
+    for (i = 0; i < 2; i++)
+    {
+      for (j = 0; j < 4 ; j++)
+      {
+        if (blockData[i + j] != 255 - blockData[i + 4 + j]) return 0;
+      }
+    }
+    for (i = 12; i <= 14; i++)
+    {
+      if (blockData[i] != 255 - blockData[i + 1]) return 0;
+    }
+
+    // Integrity checks passed at this point.
+    int32_t valueLE = 0;
+    for (i = 3; i >= 0; i--)
+    {
+      valueLE = valueLE << 8;
+      valueLE += blockData[i];
+    }
+    *value = le32toh(valueLE);
+    return 1;
+  }
+  else return 0;
+}
+
+/**************************************************************************/
+/*!
+    Tries to decrement the value in the value block.
+
+    @param  blockNumber   The block number holding the value to decrement.
+                          (0..63 for 1KB cards, and 0..255 for 4KB cards).
+
+    @param  amount        The number by which to decrement the block's
+                          value (ignored, always 1).
+
+    @returns 1 if everything executed properly, 0 for an error
+*/
+/**************************************************************************/
+bool Adafruit_PN532::mifareclassic_DecrementValueBlock (uint8_t blockNumber, int32_t amount)
+{
+  #ifdef MIFAREDEBUG
+    PN532DEBUGPRINT.print(F("Trying to decrement value in block "));PN532DEBUGPRINT.println(blockNumber);
+  #endif
+
+  /* Prepare the first command */
+  pn532_packetbuffer[0] = PN532_COMMAND_INDATAEXCHANGE;
+  pn532_packetbuffer[1] = 1;                      /* Card number */
+  pn532_packetbuffer[2] = MIFARE_CMD_DECREMENT;   /* Mifare Decrement command = 0xC0 */
+  pn532_packetbuffer[3] = blockNumber;            /* Block Number (0..63 for 1K, 0..255 for 4K) */
+
+  pn532_packetbuffer[4] = 1;
+  pn532_packetbuffer[5] = 0;
+  pn532_packetbuffer[6] = 0;
+  pn532_packetbuffer[7] = 0;
+
+  /* Send the command */
+  if (! sendCommandCheckAck(pn532_packetbuffer, 8))
+  {
+    #ifdef MIFAREDEBUG
+      PN532DEBUGPRINT.println(F("Failed to receive ACK for decrement command"));
+    #endif
+    return 0;
+  }
+  delay(10);
+
+  pn532_packetbuffer[0] = PN532_COMMAND_INDATAEXCHANGE;
+  pn532_packetbuffer[1] = 1;                      /* Card number */
+  pn532_packetbuffer[2] = MIFARE_CMD_TRANSFER;    /* Mifare Transfer command = 0xB0 */
+  pn532_packetbuffer[3] = blockNumber;            /* Block Number (0..63 for 1K, 0..255 for 4K) */
+
+  /* Send the command */
+  if (! sendCommandCheckAck(pn532_packetbuffer, 4))
+  {
+    #ifdef MIFAREDEBUG
+      PN532DEBUGPRINT.println(F("Failed to receive ACK for transfer command"));
+    #endif
+    return 0;
+  }
+  delay(10);
+
+  return 1;
+}
+
+/**************************************************************************/
+/*!
+    Tries to increment the value in the value block.
+
+    @param  blockNumber   The block number holding the value to increment.
+                          (0..63 for 1KB cards, and 0..255 for 4KB cards).
+
+    @param  amount        The number by which to increment the block's
+                          value (ignored, always 1).
+
+    @returns 1 if everything executed properly, 0 for an error
+*/
+/**************************************************************************/
+bool Adafruit_PN532::mifareclassic_IncrementValueBlock (uint8_t blockNumber, int32_t amount)
+{
+  #ifdef MIFAREDEBUG
+    PN532DEBUGPRINT.print(F("Trying to increment value in block "));PN532DEBUGPRINT.println(blockNumber);
+  #endif
+
+  /* Prepare the first command */
+  pn532_packetbuffer[0] = PN532_COMMAND_INDATAEXCHANGE;
+  pn532_packetbuffer[1] = 1;                      /* Card number */
+  pn532_packetbuffer[2] = MIFARE_CMD_INCREMENT;   /* Mifare Increment command = 0xC1 */
+  pn532_packetbuffer[3] = blockNumber;            /* Block Number (0..63 for 1K, 0..255 for 4K) */
+
+  pn532_packetbuffer[4] = 1;
+  pn532_packetbuffer[5] = 0;
+  pn532_packetbuffer[6] = 0;
+  pn532_packetbuffer[7] = 0;
+
+  /* Send the command */
+  if (! sendCommandCheckAck(pn532_packetbuffer, 8))
+  {
+    #ifdef MIFAREDEBUG
+      PN532DEBUGPRINT.println(F("Failed to receive ACK for increment command"));
+    #endif
+    return 0;
+  }
+  delay(10);
+
+  pn532_packetbuffer[0] = PN532_COMMAND_INDATAEXCHANGE;
+  pn532_packetbuffer[1] = 1;                      /* Card number */
+  pn532_packetbuffer[2] = MIFARE_CMD_TRANSFER;    /* Mifare Transfer command = 0xB0 */
+  pn532_packetbuffer[3] = blockNumber;            /* Block Number (0..63 for 1K, 0..255 for 4K) */
+
+  /* Send the command */
+  if (! sendCommandCheckAck(pn532_packetbuffer, 4))
+  {
+    #ifdef MIFAREDEBUG
+      PN532DEBUGPRINT.println(F("Failed to receive ACK for transfer command"));
+    #endif
+    return 0;
+  }
+  delay(10);
 
   return 1;
 }
