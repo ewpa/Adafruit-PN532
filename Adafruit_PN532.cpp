@@ -1014,12 +1014,12 @@ uint8_t Adafruit_PN532::mifareclassic_WriteDataBlock (uint8_t blockNumber, uint8
 bool Adafruit_PN532::mifareclassic_InitValueBlock (uint8_t blockNumber, int32_t value)
 {
   uint8_t blockData[16];
-  int32_t valueBE = htobe32(value);
+  int32_t valueLE = htole32(value);
   short i; for (i = 0; i < 4; i++)
   {
-    blockData[i] = blockData[i + 8] = valueBE & 0xFF;
+    blockData[i] = blockData[i + 8] = valueLE & 0xFF;
     blockData[i + 4] = ~blockData[i];
-    valueBE = valueBE >> 8;
+    valueLE = valueLE >> 8;
   }
   blockData[12] = blockData[14] = blockNumber;
   blockData[13] = blockData[15] = ~blockNumber;
@@ -1077,7 +1077,7 @@ bool Adafruit_PN532::mifareclassic_ReadValueBlock (uint8_t blockNumber, int32_t 
                           (0..63 for 1KB cards, and 0..255 for 4KB cards).
 
     @param  amount        The number by which to decrement the block's
-                          value (ignored, always 1).
+                          value.
 
     @returns 1 if everything executed properly, 0 for an error
 */
@@ -1094,10 +1094,12 @@ bool Adafruit_PN532::mifareclassic_DecrementValueBlock (uint8_t blockNumber, int
   pn532_packetbuffer[2] = MIFARE_CMD_DECREMENT;   /* Mifare Decrement command = 0xC0 */
   pn532_packetbuffer[3] = blockNumber;            /* Block Number (0..63 for 1K, 0..255 for 4K) */
 
-  pn532_packetbuffer[4] = 1;
-  pn532_packetbuffer[5] = 0;
-  pn532_packetbuffer[6] = 0;
-  pn532_packetbuffer[7] = 0;
+  int32_t amountLE = htole32(amount);
+  short i; for (i = 0; i < 4; i++)
+  {
+    pn532_packetbuffer[4 + i] = amountLE & 0xFF;
+    amountLE = amountLE >> 8;
+  }
 
   /* Send the command */
   if (! sendCommandCheckAck(pn532_packetbuffer, 8))
@@ -1135,7 +1137,7 @@ bool Adafruit_PN532::mifareclassic_DecrementValueBlock (uint8_t blockNumber, int
                           (0..63 for 1KB cards, and 0..255 for 4KB cards).
 
     @param  amount        The number by which to increment the block's
-                          value (ignored, always 1).
+                          value.
 
     @returns 1 if everything executed properly, 0 for an error
 */
@@ -1152,10 +1154,12 @@ bool Adafruit_PN532::mifareclassic_IncrementValueBlock (uint8_t blockNumber, int
   pn532_packetbuffer[2] = MIFARE_CMD_INCREMENT;   /* Mifare Increment command = 0xC1 */
   pn532_packetbuffer[3] = blockNumber;            /* Block Number (0..63 for 1K, 0..255 for 4K) */
 
-  pn532_packetbuffer[4] = 1;
-  pn532_packetbuffer[5] = 0;
-  pn532_packetbuffer[6] = 0;
-  pn532_packetbuffer[7] = 0;
+  int32_t amountLE = htole32(amount);
+  short i; for (i = 0; i < 4; i++)
+  {
+    pn532_packetbuffer[4 + i] = amountLE & 0xFF;
+    amountLE = amountLE >> 8;
+  }
 
   /* Send the command */
   if (! sendCommandCheckAck(pn532_packetbuffer, 8))
