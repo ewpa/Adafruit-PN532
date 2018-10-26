@@ -1007,11 +1007,13 @@ uint8_t Adafruit_PN532::mifareclassic_WriteDataBlock (uint8_t blockNumber, uint8
                           1KB cards, and 0..255 for 4KB cards).
     @param  value         The 32 bit signed value to initialize the value
                           with.
+    @param  address       Optional 8 bit value, often used to denote the
+                          block address.
 
     @returns 1 if everything executed properly, 0 for an error
 */
 /**************************************************************************/
-bool Adafruit_PN532::mifareclassic_InitValueBlock (uint8_t blockNumber, int32_t value)
+bool Adafruit_PN532::mifareclassic_InitValueBlock (uint8_t blockNumber, int32_t value, uint8_t address)
 {
   uint8_t blockData[16];
   int32_t valueLE = htole32(value);
@@ -1021,8 +1023,8 @@ bool Adafruit_PN532::mifareclassic_InitValueBlock (uint8_t blockNumber, int32_t 
     blockData[i + 4] = ~blockData[i];
     valueLE = valueLE >> 8;
   }
-  blockData[12] = blockData[14] = blockNumber;
-  blockData[13] = blockData[15] = ~blockNumber;
+  blockData[12] = blockData[14] = address;
+  blockData[13] = blockData[15] = ~address;
   return mifareclassic_WriteDataBlock(blockNumber, &blockData[0]);
 }
 
@@ -1034,11 +1036,13 @@ bool Adafruit_PN532::mifareclassic_InitValueBlock (uint8_t blockNumber, int32_t 
                           1KB cards, and 0..255 for 4KB cards).
     @param  value         Pointer to the 32 bit signed variable to write
                           the value to.
+    @param  address       Pointer to the optional 8 bit value, often used
+                          to denote the block address.
 
     @returns 1 if everything executed properly, 0 for an error
 */
 /**************************************************************************/
-bool Adafruit_PN532::mifareclassic_ReadValueBlock (uint8_t blockNumber, int32_t *value)
+bool Adafruit_PN532::mifareclassic_ReadValueBlock (uint8_t blockNumber, int32_t *value, uint8_t *address)
 {
   uint8_t blockData[16];
   if (mifareclassic_ReadDataBlock(blockNumber, &blockData[0]))
@@ -1064,6 +1068,7 @@ bool Adafruit_PN532::mifareclassic_ReadValueBlock (uint8_t blockNumber, int32_t 
       valueLE += blockData[i];
     }
     *value = le32toh(valueLE);
+    *address = blockData[12];
     return 1;
   }
   else return 0;
