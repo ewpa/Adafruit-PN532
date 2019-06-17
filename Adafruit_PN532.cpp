@@ -1776,14 +1776,12 @@ void Adafruit_PN532::readdata(uint8_t* buff, uint8_t n) {
       if (_hardwareSPI) SPI.beginTransaction(PN532_SPI_SETTING);
     #endif
     digitalWrite(_ss, LOW);
-    delay(2);
     spi_write(PN532_SPI_DATAREAD);
 
     #ifdef PN532DEBUG
       PN532DEBUGPRINT.print(F("Reading: "));
     #endif
     for (uint8_t i=0; i<n; i++) {
-      delay(1);
       buff[i] = spi_read();
       #ifdef PN532DEBUG
         PN532DEBUGPRINT.print(F(" 0x"));
